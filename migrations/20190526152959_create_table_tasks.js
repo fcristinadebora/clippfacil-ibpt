@@ -4,6 +4,7 @@ exports.up = function(knex, Promise) {
       table.increments('id').primary()
       table.string('desc').notNull()
       table.datetime('doneAt')
+      table.datetime('estimateAt')
       table.integer('userId').references('id').inTable('users').notNull()
   })
 };
