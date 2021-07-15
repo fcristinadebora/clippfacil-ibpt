@@ -1,0 +1,19 @@
+version: "3.7"
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: clippfacil_ibpt
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    ports: 
+      - '5435:5432'
+    volumes:
+      - ./data/postgres-data:/var/lib/postgresql/data
+
+volumes:
+    postgres-data:

@@ -1,17 +1,18 @@
+require('dotenv/config');
 const express = require('express')
 const app = express()
-const db = require('./config/db')
 const consign = require('consign')
+const db = require('./src/config/db')
 
-consign()
-    .include('./config/passport.js')
+consign({ cwd: 'src' })
     .then('./config/middlewares.js')
+    .then('./services')
     .then('./api')
     .then('./config/routes.js')
     .into(app)
 
 app.db = db
 
-app.listen(3000, () => {
-    console.log('Backend executando...')
+app.listen(process.env.PORT, () => {
+    console.log(`Backend executando na porta ${process.env.PORT}`)
 })
