@@ -5,8 +5,10 @@ module.exports = app => {
     const uri = process.env.IBPT_HOST
     const token = process.env.IBPT_TOKEN
     const cnpj = process.env.SOFTWARE_HOUSE_CNPJ
+    const timeout = 1000 * 10 // 10 seconds
 
     const client = axios.create({
+        timeout: timeout,
         headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json;charset=UTF-8'
