@@ -49,7 +49,6 @@ module.exports = app => {
                 return null
             }
 
-
             const entity = parseToEntity(ibptFromService);
 
             const result = await gateway.save(entity);
@@ -117,7 +116,7 @@ module.exports = app => {
             return false
         }
 
-        const maxNcm = 100;
+        const maxNcm = process.env.PARAM_NCM_MAX_LENGTH;
         if (req.body.ncm.length > maxNcm) {
             res.status(422).send(`ncm collection cannot be greater than ${maxNcm}`)
             return false
