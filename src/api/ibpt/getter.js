@@ -1,98 +1,78 @@
-const gateway = require('./getterGateway')()
+const getterGateway = require('./getterGateway')
 
 module.exports = app => {
+    const gateway = getterGateway(app)
+
     const get = async (req, res) => {
-        validateParams(req, res);
+        if (!validateParams(req, res)) {
+            return false;
+        }
         
         const uf = req.body.uf
         const ncmCollection = req.body.ncm.map((ncm) => ({ codigo: ncm.codigo, excecaoFiscal: ncm.excecaoFiscal }))
         const ultimaVersao = req.body.ultimaVersao
 
-        const ibptFromDatabase = await gateway.fetchAllIbptFromDatabase({ uf, ncmCollection, ultimaVersao })
-        res.json({ibpt: ibptFromDatabase});
-        
-        const ncmResponseCollection =  [];
-        
-        console.log(ncmCollection.forEach(async ncm => {
+        const ibptFromDatabase = await gateway.getAllIbpt({ uf, ncmCollection, ultimaVersao })
+        const ncmResponseCollection = ibptFromDatabase
+
+        const notStoredNcm = filterNotStoredNcm(uf, ncmCollection, ibptFromDatabase)
+
+        for (const ncm of notStoredNcm) {
             const filters = {
                 uf,
                 codigo: ncm.codigo,
-                ex: ncm.ex
+                ex: ncm.excecaoFiscal
             }
 
             const ibpt = await getProductIbpt(filters)
-            if (ibpt) {
-                ncmResponseCollection.push(ibpt)
-                console.log('eee', ncmResponseCollection.length)
+            if (!ibpt) {
+                continue 
             }
-            console.log('a')
 
-            return ibpt;
-        }))        
+            ncmResponseCollection.push(ibpt)
+        }
+
+        res.json({
+            ibpt: ncmResponseCollection
+        })
     }
 
     const getProductIbpt = async (params) => {
-        const ibptFromDb = await getFromDatabase(params);
+        const ibptFromDb = await gateway.get(params);
         if (ibptFromDb) {
             return ibptFromDb;
         }
 
         try {
             const ibptFromService = await getFromService(params);
-            const entity = parseToEntity(ibptFromService.data);
+            if (!ibptFromService) {
+                return null
+            }
 
-            const result = await save(entity);
+
+            const entity = parseToEntity(ibptFromService);
+
+            const result = await gateway.save(entity);
 
             return entity
         } catch (error) {
+            console.error(error)
             return null
-        }
-    }
-
-    const fetchAllFromDatabase = async (params) => {
-        const currentDate = moment().endOf('day').toDate()
-        try {
-            const data = await app.db('ibpt')
-                .where({uf: params.codigo})
-                .where(currentDate, 'BETWEEN', 'vigenciaInicio AND vigenciaFinal')
-                .where('versao', '!=', params.ultimaVersao)
-                .andWhere((builder) => {
-                    params.ncmCollection.forEach((ncm) => {
-                        builder.orWhere((builder) => {
-                            builder.where({codigo: ncm.codigo})
-                                .where({excecaoFiscal: ncm.excecaoFiscal})
-                        })
-                    })
-                })
-                .first();
-
-            return data
-        } catch (error) {
-            console.error(error)
-            return null;
-        }
-    }
-
-    const getFromDatabase = async (params) => {
-        try {
-            const data = await app.db('ibpt')
-                .where({
-                    codigo: params.codigo
-                })
-                .first();
-
-            return data
-        } catch (error) {
-            console.error(error)
-            return null;
         }
     }
 
     const getFromService = async (params) => {
         try {
-            const data = await app.services.deOlhoNoImposto.getProduct(params)
+            const response = await app.services.deOlhoNoImposto.getProduct({
+                ...params
+            })
 
-            return data
+            const ibptNotFound = !response.data.Codigo
+            if (ibptNotFound) {
+                return null
+            }
+
+            return response.data
         } catch (error) {
             return null
         }
@@ -121,25 +101,44 @@ module.exports = app => {
         }
     }
 
-    const save = async (ibpt) => {
-        return app.db('ibpt').insert(ibpt)
-    }
-
     const validateParams = (req, res) => {
+        if (!req.body) {
+            res.status(422).send('request body is required')
+            return false
+        }
+
         if (!req.body.uf) {
-            return res.status(422).send('uf is required')
+            res.status(422).send('uf is required')
+            return false
         }
 
         if (!(req.body.ncm && req.body.ncm.length)) {
-            return res.status(422).send('ncm cannot be empty')
+            res.status(422).send('ncm cannot be empty')
+            return false
         }
 
         const maxNcm = 100;
         if (req.body.ncm.length > maxNcm) {
-            return res.status(422).send(`ncm collection cannot be greater than ${maxNcm}`)
+            res.status(422).send(`ncm collection cannot be greater than ${maxNcm}`)
+            return false
         }
 
         return true;
+    }
+
+    const ncmHasIbpt = (ncm, uf, storedIbpt) => {
+        const hasIbpt =  storedIbpt.some(ibpt => {
+            return (
+            ncm.codigo == ibpt.codigo &&
+            uf == ibpt.uf &&
+            ncm.excecaoFiscal == ibpt.excecaoFiscal
+        )})
+
+        return hasIbpt
+    }
+
+    const filterNotStoredNcm = (uf, ncmCollection, ibptFromDatabase) => {
+        return ncmCollection.filter(ncm => !ncmHasIbpt(ncm, uf, ibptFromDatabase))
     }
 
     return { get }
